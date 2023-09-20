@@ -1,19 +1,9 @@
 require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
-const multer = require("multer");
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads");
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + "-" + file.originalname);
-  },
-});
-
-const upload = multer({ storage: storage });
+const s3Client = require("./config/aws-config");
+const { PutObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const app = express();
 app.use(express.json());
@@ -22,8 +12,17 @@ app.use(cors());
 
 const port = process.env.PORT;
 
-app.post("/upload", upload.array("file"), (req, res) => {
-  res.json({ message: "uploaded successful" });
+app.post("/upload", async (req, res) => {
+  const uploadedFile = req.body;
+  const command = new PutObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET,
+    Key: `uploads/temp-videos/${uploadedFile.filename}`,
+    ContentType: uploadedFile.mimetype,
+  });
+  const preSignedUrl = await getSignedUrl(s3Client, command, {
+    expiresIn: 200,
+  });
+  res.json({ message: "uploaded successful", preSignedUrl });
 });
 
 app.listen(port, () => {
