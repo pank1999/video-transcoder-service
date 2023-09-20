@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
-
+import Axios from "axios";
 export default function Home() {
-  const [image, setImage] = useState(null);
+  const [image, setImage] = useState<File>();
+  const [isUploading, setIsUploading] = useState(false);
+  const [success, setSuccess] = useState(false);
   const uploadToClient = (event: any) => {
     if (event.target.files && event.target.files[0]) {
       const i = event.target.files[0];
@@ -10,15 +12,42 @@ export default function Home() {
     }
   };
   const onsubmit = async () => {
-    const body = new FormData();
+    setIsUploading(true);
     if (image) {
-      body.append("file", image);
-      console.log({ body });
-      const response = await fetch("http://localhost:3001/upload", {
-        method: "POST",
-        body,
+      // sending meta data to server
+      const response = await Axios.post<
+        { message: string; preSignedUrl: string },
+        any
+      >("http://localhost:3001/upload", {
+        filename: image.name,
+        mimetype: image.type,
       });
-      console.log({ response });
+
+      if (response.data) {
+        const options = {
+          headers: {
+            "Content-Type": image.type,
+            //  onUploadProgress: function (progressEvent) {
+            //     let percentCompleted = Math.round(
+            //       (progressEvent.loaded * 100) / progressEvent.total
+            //     );
+            //     console.log(percentCompleted);
+            //   },
+          },
+        };
+        // uploading video to AWS-s3 bucket using SignedURL
+        Axios.put(response.data.preSignedUrl, image, options)
+          .then((result) => {
+            setIsUploading(false);
+            setSuccess(true);
+            setTimeout(() => {
+              setSuccess(false);
+            }, 5000);
+          })
+          .catch((err) => {
+            console.log(err);
+          });
+      }
     }
   };
   return (
@@ -32,6 +61,14 @@ export default function Home() {
       }}
       className="w-full bg-gray-100  p-10 "
     >
+      {!success ? (
+        ""
+      ) : (
+        <div className="p-2 border-solid border-2 rounded-md mb-5">
+          <p className=" text-green-400">Video Uploaded Successful</p>
+        </div>
+      )}
+
       <h1 className=" text-center font-bold text-3xl pb-5">
         Video Transcoder Service
       </h1>
@@ -42,7 +79,7 @@ export default function Home() {
           type="submit"
           onClick={onsubmit}
         >
-          Upload
+          {isUploading ? "Uploading.." : "Upload"}
         </button>
       </div>
     </div>
